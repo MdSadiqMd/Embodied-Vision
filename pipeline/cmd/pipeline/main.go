@@ -13,6 +13,7 @@ import (
 	"github.com/sadiq/human-archive/pipeline/internal/classifier"
 	"github.com/sadiq/human-archive/pipeline/internal/downloader"
 	"github.com/sadiq/human-archive/pipeline/internal/s3client"
+	"github.com/sadiq/human-archive/pipeline/internal/uploader"
 )
 
 func main() {
@@ -28,6 +29,8 @@ func main() {
 	outputRoot := flag.String("output", "../output", "root dir where per-video results are written")
 	classifierDir := flag.String("classifier-dir", "../classifier", "path to Python classifier project (uv root)")
 	keepVideos := flag.Bool("keep-videos", false, "keep downloaded videos after classification")
+
+	destBucket := flag.String("dest-bucket", "", "s3 bucket to upload classified frames to (empty = skip upload)")
 
 	baseFPS := flag.Float64("base-fps", 1.0, "uniform sampling rate")
 	eventFPS := flag.Float64("event-fps", 5.0, "fps within event context windows")
@@ -102,6 +105,15 @@ func main() {
 		} else {
 			fmt.Printf("     classified  frames=%d  labels=%v  reasons=%v  dir=%s\n",
 				sum.SampledFrames, sum.LabelCounts, sum.ReasonCounts, sum.OutputDir)
+
+			if *destBucket != "" {
+				n, uerr := uploader.UploadFrames(ctx, s3c, *destBucket, sum.OutputDir)
+				if uerr != nil {
+					log.Printf("upload frames to s3 failed for %s: %v", item.Key, uerr)
+				} else {
+					fmt.Printf("     uploaded  %d frames to s3://%s\n", n, *destBucket)
+				}
+			}
 		}
 
 		if !*keepVideos {
